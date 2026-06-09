@@ -521,6 +521,11 @@ struct ContentView: View {
 
 struct ProfileView: View {
     let colorScheme: ColorScheme
+    
+    @AppStorage("authToken") private var authToken: String = ""
+    @AppStorage("authUsername") private var authUsername: String = ""
+    @AppStorage("authAvatarURL") private var authAvatarURL: String = ""
+    
     @State private var showSignInSheet = false
     
     var body: some View {
@@ -532,48 +537,66 @@ struct ProfileView: View {
                         Circle()
                             .fill((colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)))
                             .frame(width: 90, height: 90)
-                        Image(systemName: "person.circle")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 80)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button {
-                        showSignInSheet = true
-                    } label: {
-                        Text("Sign In / Register")
-                            .font(.subheadline).bold()
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.accentColor)
-                    .sheet(isPresented: $showSignInSheet) {
-                        if #available(iOS 16.0, *) {
-                            NavigationStack {
-                                InlineHTMLWebView(html: Self.signInHTML)
-                                    .navigationTitle("Sign In")
-                                    .navigationBarTitleDisplayMode(.inline)
-                                    .toolbar {
-                                        ToolbarItem(placement: .topBarTrailing) {
-                                            Button("Done") { showSignInSheet = false }
-                                        }
-                                    }
+                        if let url = URL(string: fullAvatarURLString() ?? "") {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    ProgressView()
+                                        .frame(width: 80, height: 80)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 80, height: 80)
+                                        .clipShape(Circle())
+                                case .failure:
+                                    Image(systemName: "person.circle")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 80, height: 80)
+                                        .foregroundStyle(.secondary)
+                                @unknown default:
+                                    Image(systemName: "person.circle")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 80, height: 80)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         } else {
-                            NavigationView {
-                                InlineHTMLWebView(html: Self.signInHTML)
-                                    .navigationTitle("Sign In")
-                                    .navigationBarTitleDisplayMode(.inline)
-                                    .toolbar {
-                                        ToolbarItem(placement: .navigationBarTrailing) {
-                                            Button("Done") { showSignInSheet = false }
-                                        }
-                                    }
-                            }
-                            .navigationViewStyle(StackNavigationViewStyle())
+                            Image(systemName: "person.circle")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 80)
+                                .foregroundStyle(.secondary)
                         }
+                    }
+                    if authToken.isEmpty {
+                        Button {
+                            showSignInSheet = true
+                        } label: {
+                            Text("Sign In / Register")
+                                .font(.subheadline).bold()
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.accentColor)
+                    } else {
+                        Button {
+                            // Sign Out: clear stored values
+                            authToken = ""
+                            authUsername = ""
+                            authAvatarURL = ""
+                        } label: {
+                            Text("Sign Out")
+                                .font(.subheadline).bold()
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
                 .padding(.top, 24)
@@ -620,6 +643,40 @@ struct ProfileView: View {
         }
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showSignInSheet) {
+            if #available(iOS 16.0, *) {
+                NavigationStack {
+                    InlineHTMLWebView(html: Self.signInHTML,
+                                     authToken: $authToken,
+                                     authUsername: $authUsername,
+                                     authAvatarURL: $authAvatarURL,
+                                     isPresented: $showSignInSheet)
+                        .navigationTitle("Sign In")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Done") { showSignInSheet = false }
+                            }
+                        }
+                }
+            } else {
+                NavigationView {
+                    InlineHTMLWebView(html: Self.signInHTML,
+                                     authToken: $authToken,
+                                     authUsername: $authUsername,
+                                     authAvatarURL: $authAvatarURL,
+                                     isPresented: $showSignInSheet)
+                        .navigationTitle("Sign In")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") { showSignInSheet = false }
+                            }
+                        }
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+            }
+        }
     }
 
     @ViewBuilder
@@ -648,54 +705,111 @@ struct ProfileView: View {
         )
     }
     
+    private func fullAvatarURLString() -> String? {
+        let path = authAvatarURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if path.isEmpty { return nil }
+        if path.hasPrefix("http://") || path.hasPrefix("https://") { return path }
+        return "https://asunatracks.space" + (path.hasPrefix("/") ? path : "/" + path)
+    }
+    
     static let signInHTML: String = {
         return """
 <!DOCTYPE html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-<meta charset=\"utf-8\" />
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sign In</title>
 <style>
-  :root { --bg:#121316; --panel:#1a1c20; --muted:#8a8f98; --accent:#6f7cff; --text:#e9ecf1; }
+  :root { --bg:#121316; --panel:#1a1c20; --muted:#8a8f98; --accent:#6f7cff; --text:#e9ecf1; --stroke:rgba(255,255,255,0.08);}  
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
   .container{max-width:420px;margin:24px auto 60px auto;padding:0 16px;}
-  .logo{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:20px auto;background:rgba(111,124,255,0.15);color:var(--accent);font-size:28px;}
+
+  /* Dark icon badge similar to Profile style */
+  .logo{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:20px auto;background:rgba(255,255,255,0.06);color:var(--text);} 
+  .logo .mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02));display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--stroke);} 
+  .logo .mark span{font-weight:800;font-size:14px;letter-spacing:0.5px;color:#cfd5ff}
+
   h1{font-size:24px;text-align:center;margin:8px 0 6px 0;}
   p.sub{font-size:14px;text-align:center;color:var(--muted);margin:0 0 22px 0}
-  .field{display:flex;align-items:center;background:var(--panel);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:12px 12px;margin-bottom:12px}
+
+  .field{display:flex;align-items:center;background:var(--panel);border:1px solid var(--stroke);border-radius:12px;padding:12px 12px;margin-bottom:12px}
+  .icon{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;color:var(--muted);margin-right:8px;box-shadow:inset 0 0 0 1px var(--stroke);} 
+  .icon svg{width:16px;height:16px;opacity:0.85;}
   .field input{flex:1;background:transparent;border:0;outline:none;color:var(--text);font-size:16px}
-  .field .icon{width:22px;margin-right:8px;color:var(--muted)}
+
   .btn{display:block;width:100%;background:var(--accent);color:white;border:0;border-radius:12px;padding:12px 16px;font-weight:700;font-size:16px;margin-top:10px}
+  .btn[disabled]{opacity:0.6}
   .link{display:block;text-align:center;color:var(--muted);font-size:13px;margin-top:10px;text-decoration:none}
-  .divider{height:1px;background:rgba(255,255,255,0.06);margin:22px 0}
-  .create{display:flex;align-items:center;gap:8px;justify-content:center;font-size:13px;color:var(--muted)}
-  .create a{color:#9fb0ff;text-decoration:none}
+  .divider{height:1px;background:var(--stroke);margin:22px 0}
+  .error{background:#2a1315;color:#ff99a4;border:1px solid rgba(255,0,64,0.25);padding:10px 12px;border-radius:10px;font-size:13px;margin:6px 0 0}
+  .success{background:#132a1d;color:#9fffc8;border:1px solid rgba(0,255,128,0.25);padding:10px 12px;border-radius:10px;font-size:13px;margin:6px 0 0}
+  .status{min-height:0.01px}
 </style>
 </head>
 <body>
-  <div class=\"container\">
-    <div class=\"logo\">📺</div>
+  <div class="container">
+    <div class="logo"><div class="mark"><span>A</span></div></div>
     <h1>Asunatracks</h1>
-    <p class=\"sub\">Sign in to track your anime and manga</p>
+    <p class="sub">Sign in to track your anime and manga</p>
 
-    <div class=\"field\"><span class=\"icon\">👤</span><input id=\"username\" type=\"text\" placeholder=\"Username\" autocomplete=\"username\" /></div>
-    <div class=\"field\"><span class=\"icon\">🔒</span><input id=\"password\" type=\"password\" placeholder=\"Password\" autocomplete=\"current-password\" /></div>
-    <button class=\"btn\" onclick=\"signin()\">Sign In</button>
+    <div class="field">
+      <div class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/>
+          <path d="M4 20a8 8 0 0 1 16 0"/>
+        </svg>
+      </div>
+      <input id="username" type="text" placeholder="Username" autocomplete="username" />
+    </div>
+    <div class="field">
+      <div class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="10" rx="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+    </div>
+    <button id="signinBtn" class="btn" onclick="signin()">Sign In</button>
 
-    <a class=\"link\" href=\"#\">Don't have an account?</a>
-    <div class=\"create\">Create an account at <a href=\"https://asunatracks.space\" target=\"_blank\">asunatracks.space</a> to start tracking</div>
+    <div id="status" class="status"></div>
 
-    <div class=\"divider\"></div>
+    <a class="link" href="#">Don't have an account?</a>
+    <div class="divider"></div>
   </div>
 
 <script>
-function signin(){
+async function signin(){
+  const btn = document.getElementById('signinBtn');
+  const status = document.getElementById('status');
+  status.innerHTML = '';
   const u = document.getElementById('username').value.trim();
   const p = document.getElementById('password').value.trim();
-  if(!u || !p){ alert('Please enter username and password.'); return; }
-  // Demo: echo back values. Replace with real fetch() to your API if needed.
-  alert('Signing in as '+u+'...');
+  if(!u || !p){ status.innerHTML = '<div class="error">Please enter username and password.</div>'; return; }
+  btn.disabled = true;
+  try{
+    const res = await fetch('https://asunatracks.space/public/api/auth/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { throw new Error('Unexpected response'); }
+    if(res.ok && data && data.token){
+      status.innerHTML = '<div class="success">Signed in as <b>'+(data.user?.username || u)+'</b>. Token received.</div>';
+      // Optionally, postMessage to the app. The host app can intercept this if needed.
+      try { window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.login && window.webkit.messageHandlers.login.postMessage(data); } catch(e){}
+    } else {
+      const msg = (data && (data.error || data.message)) || 'Wrong username or password.';
+      status.innerHTML = '<div class="error">'+ msg +'</div>';
+    }
+  } catch(err){
+    status.innerHTML = '<div class="error">Network error. Please try again.</div>';
+  } finally {
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
@@ -705,9 +819,19 @@ function signin(){
     
     struct InlineHTMLWebView: UIViewRepresentable {
         let html: String
-
+        @Binding var authToken: String
+        @Binding var authUsername: String
+        @Binding var authAvatarURL: String
+        @Binding var isPresented: Bool
+        
+        func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+        
         func makeUIView(context: Context) -> WKWebView {
             let config = WKWebViewConfiguration()
+            let contentController = WKUserContentController()
+            contentController.add(context.coordinator, name: "login")
+            config.userContentController = contentController
+            
             let webView = WKWebView(frame: .zero, configuration: config)
             webView.isOpaque = false
             webView.backgroundColor = .clear
@@ -718,9 +842,27 @@ function signin(){
         func updateUIView(_ uiView: WKWebView, context: Context) {
             uiView.loadHTMLString(html, baseURL: nil)
         }
+        
+        class Coordinator: NSObject, WKScriptMessageHandler {
+            var parent: InlineHTMLWebView
+            init(parent: InlineHTMLWebView) { self.parent = parent }
+            func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+                guard message.name == "login" else { return }
+                if let dict = message.body as? [String: Any] {
+                    if let token = dict["token"] as? String { parent.authToken = token }
+                    if let user = dict["user"] as? [String: Any] {
+                        if let username = user["username"] as? String { parent.authUsername = username }
+                        if let avatar = user["avatar_url"] as? String { parent.authAvatarURL = avatar }
+                    }
+                    // Dismiss sheet after login
+                    parent.isPresented = false
+                }
+            }
+        }
     }
 }
 
 #Preview {
     ContentView()
 }
+
