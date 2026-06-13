@@ -158,58 +158,7 @@ struct ContentView: View {
         }
         .frame(width: 220)
     }
-    
-    private enum Tab: String, CaseIterable {
-        case discover, search, seasons, myList, profile
-    }
-    
-    @State private var selectedTab: Tab = .discover
-    
-    @ViewBuilder
-    private func navItem(tab: Tab, label: String, systemImage: String) -> some View {
-        let isSelected = selectedTab == tab
-        Button(action: { selectedTab = tab }) {
-            VStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 22, weight: .semibold))
-                Text(label)
-                    .font(.footnote)
-                    .fontWeight(.semibold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .allowsTightening(true)
-                    .layoutPriority(1)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
-            .frame(maxHeight: .infinity)
-            .background(
-                isSelected
-                ? (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
-                : Color.clear,
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
-            .overlay(
-                Group {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder((colorScheme == .dark ? Color.white : Color.black).opacity(0.12))
-                    }
-                }
-            )
-            .foregroundStyle(
-                isSelected
-                ? Color.accentColor
-                : (colorScheme == .dark ? Color.white.opacity(0.8) : Color.black.opacity(0.8))
-            )
-            .dynamicTypeSize(.large ... .accessibility3)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-    
+
     // MARK: - Networking
     private func fetchAnime() async {
         guard !isLoading else { return }
@@ -290,218 +239,184 @@ struct ContentView: View {
     }
     
     @ViewBuilder
-    private var contentBody: some View {
+    private var discoverView: some View {
         ZStack {
             // Adaptive background: pure black in Dark Mode, pure white in Light Mode
             (colorScheme == .dark ? Color(red: 0.07, green: 0.07, blue: 0.07) : Color.white)
                 .ignoresSafeArea()
 
-            VStack {
-                // Content
-                if selectedTab == .profile {
-                    ProfileView(colorScheme: colorScheme)
-                } else {
-                    ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 16) {
-                            // Header
-                            HStack(alignment: .firstTextBaseline) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Asunatracks")
-                                        .font(.largeTitle).bold()
-                                    Text("Discover anime and manga, track your progress")
-                                        .font(.subheadline)
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Header
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Asunatracks")
+                                .font(.largeTitle).bold()
+                            Text("Discover anime and manga, track your progress")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+
+                    // Popular Anime Section
+                    HStack {
+                        Text("Popular Anime")
+                            .font(.title2).bold()
+                        Spacer()
+                        Button("See all") {}
+                            .font(.callout)
+                    }
+                    .padding(.horizontal, 20)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 14) {
+                            if isLoading {
+                                ProgressView()
+                                    .frame(width: 220, height: 300)
+                            } else if let errorMessage = errorMessage {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .font(.title)
                                         .foregroundStyle(.secondary)
+                                    Text(errorMessage)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                        .frame(width: 220)
                                 }
-                                Spacer()
+                            } else {
+                                ForEach(fetchedAnime.prefix(12)) { item in
+                                    animeCard(item)
+                                }
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 16)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                    }
+                    
+                    // Popular Manga Section
+                    HStack {
+                        Text("Popular Manga")
+                            .font(.title2).bold()
+                        Spacer()
+                        Button("See all") {}
+                            .font(.callout)
+                    }
+                    .padding(.horizontal, 20)
 
-                            // Popular Anime Section
-                            HStack {
-                                Text("Popular Anime")
-                                    .font(.title2).bold()
-                                Spacer()
-                                Button("See all") {}
-                                    .font(.callout)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 14) {
+                            if isLoadingManga {
+                                ProgressView()
+                                    .frame(width: 220, height: 300)
+                            } else if let mangaErrorMessage = mangaErrorMessage {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .font(.title)
+                                        .foregroundStyle(.secondary)
+                                    Text(mangaErrorMessage)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.center)
+                                        .frame(width: 220)
+                                }
+                            } else {
+                                ForEach(fetchedManga.prefix(12)) { item in
+                                    animeCard(item)
+                                }
                             }
-                            .padding(.horizontal, 20)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                    }
 
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Action Anime")
+                            .font(.title2).bold()
+                            .padding(.horizontal)
+
+                        if isLoadingAction {
+                            ProgressView()
+                                .padding(.horizontal)
+                        } else {
                             ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 14) {
-                                    if isLoading {
-                                        ProgressView()
-                                            .frame(width: 220, height: 300)
-                                    } else if let errorMessage = errorMessage {
-                                        VStack(spacing: 8) {
-                                            Image(systemName: "exclamationmark.triangle")
-                                                .font(.title)
-                                                .foregroundStyle(.secondary)
-                                            Text(errorMessage)
-                                                .font(.footnote)
-                                                .foregroundStyle(.secondary)
-                                                .multilineTextAlignment(.center)
-                                                .frame(width: 220)
-                                        }
-                                    } else {
-                                        ForEach(fetchedAnime.prefix(12)) { item in
-                                            animeCard(item)
-                                        }
+                                HStack(spacing: 16) {
+                                    ForEach(actionAnime) { item in
+                                        animeCard(item)
                                     }
                                 }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal)
                             }
-                            
-                            // Popular Manga Section
-                            HStack {
-                                Text("Popular Manga")
-                                    .font(.title2).bold()
-                                Spacer()
-                                Button("See all") {}
-                                    .font(.callout)
-                            }
-                            .padding(.horizontal, 20)
-
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 14) {
-                                    if isLoadingManga {
-                                        ProgressView()
-                                            .frame(width: 220, height: 300)
-                                    } else if let mangaErrorMessage = mangaErrorMessage {
-                                        VStack(spacing: 8) {
-                                            Image(systemName: "exclamationmark.triangle")
-                                                .font(.title)
-                                                .foregroundStyle(.secondary)
-                                            Text(mangaErrorMessage)
-                                                .font(.footnote)
-                                                .foregroundStyle(.secondary)
-                                                .multilineTextAlignment(.center)
-                                                .frame(width: 220)
-                                        }
-                                    } else {
-                                        ForEach(fetchedManga.prefix(12)) { item in
-                                            animeCard(item)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
-                            }
-
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Action Anime")
-                                    .font(.title2).bold()
-                                    .padding(.horizontal)
-
-                                if isLoadingAction {
-                                    ProgressView()
-                                        .padding(.horizontal)
-                                } else {
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 16) {
-                                            ForEach(actionAnime) { item in
-                                                ZStack(alignment: .topLeading) {
-                                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                                        .fill(Color.gray.opacity(0.15))
-                                                        .frame(width: 220, height: 300)
-                                                        .overlay(
-                                                            Group {
-                                                                if let urlString = item.image_url, let url = URL(string: urlString) {
-                                                                    AsyncImage(url: url) { phase in
-                                                                        switch phase {
-                                                                        case .empty:
-                                                                            ProgressView()
-                                                                                .frame(width: 220, height: 300)
-                                                                        case .success(let image):
-                                                                            image
-                                                                                .resizable()
-                                                                                .scaledToFill()
-                                                                                .frame(width: 220, height: 300)
-                                                                                .clipped()
-                                                                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                                                        case .failure(_):
-                                                                            ZStack {
-                                                                                Color.gray.opacity(0.1)
-                                                                                Image(systemName: "photo")
-                                                                                    .resizable()
-                                                                                    .scaledToFit()
-                                                                                    .frame(width: 60, height: 60)
-                                                                                    .foregroundColor(.secondary)
-                                                                            }
-                                                                            .frame(width: 220, height: 300)
-                                                                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                                                        @unknown default:
-                                                                            EmptyView()
-                                                                        }
-                                                                    }
-                                                                } else {
-                                                                    Color.gray.opacity(0.1)
-                                                                        .frame(width: 220, height: 300)
-                                                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                                                }
-                                                            }
-                                                        )
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal)
-                                    }
-                                }
-                            }
-
-                            Spacer(minLength: 120)
                         }
                     }
-                    .task {
-                        await fetchAnime()
-                        await fetchManga()
-                        await loadActionAnime()
-                    }
-                }
 
-                // Rounded, translucent navigation bar
-                HStack(spacing: 4) {
-                    navItem(tab: .discover, label: "Discover", systemImage: "house")
-                    navItem(tab: .search, label: "Search", systemImage: "magnifyingglass")
-                    navItem(tab: .seasons, label: "Seasons", systemImage: "calendar")
-                    navItem(tab: .myList, label: "My List", systemImage: "bookmark")
-                    navItem(tab: .profile, label: "Profile", systemImage: "person")
+                    Spacer(minLength: 24)
                 }
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity)
-                .frame(height: 78)
-                .background(
-                    .ultraThinMaterial
-                        .opacity(0.95),
-                    in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(
-                            (colorScheme == .dark ? Color.white : Color.black)
-                                .opacity(0.12)
-                        )
-                )
-                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.12), radius: 20, x: 0, y: 10)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 30)
+            }
+            .task {
+                await fetchAnime()
+                await fetchManga()
+                await loadActionAnime()
             }
         }
     }
     
     var body: some View {
-        Group {
-            if #available(iOS 16.0, *) {
-                NavigationStack {
-                    contentBody
-                }
-            } else {
-                NavigationView {
-                    contentBody
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
+        TabView {
+            navigationContainer {
+                discoverView
+                    .navigationTitle("Discover")
             }
+            .tabItem {
+                Label("Discover", systemImage: "house.fill")
+            }
+
+            navigationContainer {
+                PlaceholderTabView(title: "Search", systemImage: "magnifyingglass")
+                    .navigationTitle("Search")
+            }
+            .tabItem {
+                Label("Search", systemImage: "magnifyingglass")
+            }
+
+            navigationContainer {
+                PlaceholderTabView(title: "Seasons", systemImage: "calendar")
+                    .navigationTitle("Seasons")
+            }
+            .tabItem {
+                Label("Seasons", systemImage: "calendar")
+            }
+
+            navigationContainer {
+                MyListView()
+            }
+            .tabItem {
+                Label("My List", systemImage: "bookmark")
+            }
+
+            navigationContainer {
+                ProfileView(colorScheme: colorScheme)
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person.crop.circle")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func navigationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if #available(iOS 16.0, *) {
+            NavigationStack {
+                content()
+            }
+        } else {
+            NavigationView {
+                content()
+            }
+            .navigationViewStyle(StackNavigationViewStyle())
         }
     }
     
@@ -516,6 +431,384 @@ struct ContentView: View {
         } catch {
             print("Failed to load Action Anime:", error)
         }
+    }
+}
+
+enum LibraryFilter: String, CaseIterable, Identifiable {
+    case all
+    case anime
+    case manga
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .anime: "Anime"
+        case .manga: "Manga"
+        }
+    }
+}
+
+struct MyListResponse: Decodable {
+    let type: String?
+    let items: [MyListEntry]
+}
+
+struct MyListEntry: Identifiable, Decodable {
+    let entryID: Int
+    let status: String?
+    let progress: Int?
+    let progressVolumes: Int?
+    let score10: Double?
+    let rating: Double?
+    let favorite: Bool
+    let media: ContentView.Anime
+
+    var id: Int { entryID }
+
+    enum CodingKeys: String, CodingKey {
+        case entryID = "entry_id"
+        case status
+        case progress
+        case progressVolumes = "progress_volumes"
+        case score10 = "score_10"
+        case rating
+        case favorite
+        case media
+    }
+}
+
+struct MyListView: View {
+    @AppStorage("authToken") private var authToken: String = ""
+
+    @State private var filter: LibraryFilter = .all
+    @State private var entries: [MyListEntry] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private var isSignedIn: Bool {
+        !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var filteredEntries: [MyListEntry] {
+        switch filter {
+        case .all:
+            entries
+        case .anime:
+            entries.filter { $0.media.media_type == "anime" }
+        case .manga:
+            entries.filter { $0.media.media_type == "manga" }
+        }
+    }
+
+    var body: some View {
+        Group {
+            if !isSignedIn {
+                MyListStateView(
+                    systemImage: "person.crop.circle.badge.plus",
+                    title: "Sign in to see your list",
+                    message: "Your AsunaTracks progress list appears here after you sign in from the Profile tab."
+                )
+            } else if isLoading && entries.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let errorMessage {
+                MyListStateView(
+                    systemImage: "books.vertical",
+                    title: "My List unavailable",
+                    message: errorMessage,
+                    retryTitle: "Retry",
+                    retry: { Task { await loadList() } }
+                )
+            } else if filteredEntries.isEmpty {
+                MyListStateView(
+                    systemImage: "plus.rectangle.on.rectangle",
+                    title: "No tracked titles yet",
+                    message: "Open a title from Discover and save it to your AsunaTracks list."
+                )
+            } else {
+                List {
+                    Section {
+                        myListSummary(filteredEntries)
+                    }
+                    .listRowBackground(Color.clear)
+
+                    Section {
+                        ForEach(filteredEntries) { entry in
+                            MyListEntryRow(entry: entry)
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+                .modifier(HiddenScrollContentBackground())
+                .refreshable {
+                    await loadList()
+                }
+            }
+        }
+        .navigationTitle("My List")
+        .safeAreaInset(edge: .top) {
+            Picker("My List", selection: $filter) {
+                ForEach(LibraryFilter.allCases) { item in
+                    Text(item.title).tag(item)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(.bar)
+        }
+        .background(Color(.systemBackground))
+        .task(id: authToken) {
+            if isSignedIn {
+                await loadList()
+            } else {
+                entries = []
+                errorMessage = nil
+            }
+        }
+    }
+
+    private func myListSummary(_ items: [MyListEntry]) -> some View {
+        HStack(spacing: 10) {
+            MetricPill(title: "Tracked", value: "\(items.count)", color: .cyan)
+            MetricPill(title: "Favorites", value: "\(items.filter(\.favorite).count)", color: .pink)
+            MetricPill(title: "Completed", value: "\(items.filter { $0.status == "completed" }.count)", color: .mint)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func loadList() async {
+        guard isSignedIn else { return }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            var request = URLRequest(url: URL(string: "https://asunatracks.space/public/api/me/list")!)
+            request.setValue(authorizationHeaderValue(), forHTTPHeaderField: "Authorization")
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw URLError(.badServerResponse)
+            }
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                throw NSError(
+                    domain: "MyListError",
+                    code: httpResponse.statusCode,
+                    userInfo: [NSLocalizedDescriptionKey: httpResponse.statusCode == 401 ? "Please sign in again." : "Server returned \(httpResponse.statusCode)."]
+                )
+            }
+
+            let decoded = try JSONDecoder().decode(MyListResponse.self, from: data)
+            entries = decoded.items
+            errorMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func authorizationHeaderValue() -> String {
+        let token = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        if token.lowercased().hasPrefix("bearer ") {
+            return token
+        }
+        return "Bearer \(token)"
+    }
+}
+
+struct MyListEntryRow: View {
+    let entry: MyListEntry
+
+    var body: some View {
+        HStack(spacing: 12) {
+            poster
+                .frame(width: 56, height: 78)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(displayTitle)
+                        .font(.headline)
+                        .lineLimit(2)
+                    if entry.favorite {
+                        Image(systemName: "heart.fill")
+                            .foregroundColor(.pink)
+                            .font(.caption)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    StatusBadge(status: entry.status ?? "planning")
+                    Text(progressText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let score = entry.score10 ?? entry.rating {
+                    Label(String(format: "%.1f", score), systemImage: "star.fill")
+                        .font(.caption)
+                        .foregroundColor(.pink)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var poster: some View {
+        if let urlString = entry.media.image_url, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    posterPlaceholder
+                @unknown default:
+                    posterPlaceholder
+                }
+            }
+        } else {
+            posterPlaceholder
+        }
+    }
+
+    private var posterPlaceholder: some View {
+        ZStack {
+            Color.secondary.opacity(0.12)
+            Image(systemName: "photo")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var displayTitle: String {
+        entry.media.title_english?.isEmpty == false ? entry.media.title_english! : entry.media.title
+    }
+
+    private var progressText: String {
+        let current = entry.progress ?? 0
+        let total = entry.media.media_type == "manga" ? (entry.media.chapters ?? 0) : (entry.media.episodes ?? 0)
+        let label = entry.media.media_type == "manga" ? "chapters" : "episodes"
+        if total > 0 {
+            return "\(current)/\(total) \(label)"
+        }
+        return "\(current) \(label)"
+    }
+}
+
+struct MetricPill: View {
+    let title: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.headline.bold())
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(color.opacity(0.24))
+        )
+    }
+}
+
+struct StatusBadge: View {
+    let status: String
+
+    var body: some View {
+        Text(statusText)
+            .font(.caption2.bold())
+            .foregroundStyle(statusColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(statusColor.opacity(0.14), in: Capsule())
+    }
+
+    private var statusText: String {
+        status.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case "completed": .mint
+        case "watching", "reading": .cyan
+        case "paused": .orange
+        case "dropped": .red
+        default: .secondary
+        }
+    }
+}
+
+struct MyListStateView: View {
+    let systemImage: String
+    let title: String
+    let message: String
+    var retryTitle: String?
+    var retry: (() -> Void)?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.title3.bold())
+                .multilineTextAlignment(.center)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+            if let retryTitle, let retry {
+                Button(retryTitle, action: retry)
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 4)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+}
+
+struct HiddenScrollContentBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.0, *) {
+            content.scrollContentBackground(.hidden)
+        } else {
+            content
+        }
+    }
+}
+
+struct PlaceholderTabView: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.title2.bold())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
     }
 }
 
@@ -865,4 +1158,3 @@ async function signin(){
 #Preview {
     ContentView()
 }
-
