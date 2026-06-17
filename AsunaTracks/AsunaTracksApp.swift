@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct AsunaTracksApp: App {
+    @AppStorage("hasCompletedSetup") private var hasCompletedSetup = false
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if hasCompletedSetup {
+                ContentView()
+            } else {
+                OnboardingView()
+            }
         }
     }
 }

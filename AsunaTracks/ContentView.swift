@@ -8,8 +8,18 @@
 import SwiftUI
 import WebKit
 
+// MARK: - Tab Identifier
+enum AppTab: Hashable {
+    case discover
+    case search
+    case seasons
+    case myList
+    case profile
+}
+
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @State private var selectedTab: AppTab = .discover
 
     // MARK: - Networking Models
     struct APIResponse: Decodable {
@@ -48,6 +58,7 @@ struct ContentView: View {
         let rating: String?
         let asunatracks_score: AsunaTracksScore?
         let genres: [Genre]?
+        let raw: RawMediaInfo?
 
         struct Genre: Decodable {
             let id: Int?
@@ -61,6 +72,31 @@ struct ContentView: View {
             let score_10: Double?
             let rating: Double?
             let count: Int?
+        }
+
+        struct RawMediaInfo: Decodable {
+            let source: String?
+            let duration: String?
+            let chapters: Int?
+            let volumes: Int?
+            let background: String?
+            let published: RawDateInfo?
+            let aired: RawDateInfo?
+            let members: Int?
+            let favorites: Int?
+            let scored_by: Int?
+            let studios: [MediaNamedResource]?
+            let producers: [MediaNamedResource]?
+            let licensors: [MediaNamedResource]?
+            let authors: [MediaNamedResource]?
+            let serializations: [MediaNamedResource]?
+            let titles: [MediaTitle]?
+            let external: [MediaLink]?
+            let streaming: [MediaLink]?
+        }
+
+        struct RawDateInfo: Decodable {
+            let string: String?
         }
 
         var primaryGenre: String { genres?.first?.name ?? "" }
@@ -107,56 +143,61 @@ struct ContentView: View {
 
     @ViewBuilder
     private func animeCard(_ item: Anime) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.gray.opacity(0.15))
-                    .frame(width: 220, height: 300)
-                    .overlay(
-                        Group {
-                            if let urlString = item.image_url, let url = URL(string: urlString) {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .empty:
-                                        ProgressView()
-                                            .frame(width: 220, height: 300)
-                                    case .success(let image):
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 220, height: 300)
-                                            .clipped()
-                                    case .failure:
-                                        Image(systemName: "photo")
-                                            .font(.largeTitle)
-                                            .foregroundStyle(.secondary)
-                                    @unknown default:
-                                        Color.clear
+        NavigationLink {
+            MediaDetailView(item: item)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.gray.opacity(0.15))
+                        .frame(width: 220, height: 300)
+                        .overlay(
+                            Group {
+                                if let urlString = item.image_url, let url = URL(string: urlString) {
+                                    AsyncImage(url: url) { phase in
+                                        switch phase {
+                                        case .empty:
+                                            ProgressView()
+                                                .frame(width: 220, height: 300)
+                                        case .success(let image):
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 220, height: 300)
+                                                .clipped()
+                                        case .failure:
+                                            Image(systemName: "photo")
+                                                .font(.largeTitle)
+                                                .foregroundStyle(.secondary)
+                                        @unknown default:
+                                            Color.clear
+                                        }
                                     }
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 }
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
-                        }
-                    )
-                Text(item.tagText)
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .padding(10)
-            }
+                        )
+                    Text(item.tagText)
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(10)
+                }
 
-            Text(item.title)
-                .font(.headline)
-                .foregroundStyle(colorScheme == .dark ? .white : .black)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-            Text(item.infoLine)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                Text(item.title)
+                    .font(.headline)
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                Text(item.infoLine)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 220)
         }
-        .frame(width: 220)
+        .buttonStyle(.plain)
     }
 
     // MARK: - Networking
@@ -185,11 +226,9 @@ struct ContentView: View {
                 }
             } else {
                 let raw = String(data: data, encoding: .utf8) ?? "<non-utf8 data>"
-                // Try to decode a simple error envelope to surface a better message
                 if let apiError = try? decoder.decode(APIErrorEnvelope.self, from: data), let msg = apiError.message, !msg.isEmpty {
                     throw NSError(domain: "APIError", code: -2, userInfo: [NSLocalizedDescriptionKey: msg, "raw": raw])
                 }
-                // Log raw for diagnostics in development
                 print("Raw API response:", raw)
                 throw NSError(domain: "DecodeError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected response format", "raw": raw])
             }
@@ -277,16 +316,14 @@ struct ContentView: View {
                                 ProgressView()
                                     .frame(width: 220, height: 300)
                             } else if let errorMessage = errorMessage {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .font(.title)
-                                        .foregroundStyle(.secondary)
-                                    Text(errorMessage)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                        .multilineTextAlignment(.center)
-                                        .frame(width: 220)
-                                }
+                                ScreenStateView(
+                                    systemImage: "wifi.exclamationmark",
+                                    title: "Could not load AsunaTracks",
+                                    message: errorMessage,
+                                    retryTitle: "Retry",
+                                    retry: { Task { await fetchAnime() } }
+                                )
+                                .frame(width: 220, height: 300)
                             } else {
                                 ForEach(fetchedAnime.prefix(12)) { item in
                                     animeCard(item)
@@ -313,16 +350,14 @@ struct ContentView: View {
                                 ProgressView()
                                     .frame(width: 220, height: 300)
                             } else if let mangaErrorMessage = mangaErrorMessage {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "exclamationmark.triangle")
-                                        .font(.title)
-                                        .foregroundStyle(.secondary)
-                                    Text(mangaErrorMessage)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                        .multilineTextAlignment(.center)
-                                        .frame(width: 220)
-                                }
+                                ScreenStateView(
+                                    systemImage: "wifi.exclamationmark",
+                                    title: "Could not load AsunaTracks",
+                                    message: mangaErrorMessage,
+                                    retryTitle: "Retry",
+                                    retry: { Task { await fetchManga() } }
+                                )
+                                .frame(width: 220, height: 300)
                             } else {
                                 ForEach(fetchedManga.prefix(12)) { item in
                                     animeCard(item)
@@ -365,7 +400,7 @@ struct ContentView: View {
     }
     
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             navigationContainer {
                 discoverView
                     .navigationTitle("Discover")
@@ -373,14 +408,15 @@ struct ContentView: View {
             .tabItem {
                 Label("Discover", systemImage: "house.fill")
             }
+            .tag(AppTab.discover)
 
             navigationContainer {
-                PlaceholderTabView(title: "Search", systemImage: "magnifyingglass")
-                    .navigationTitle("Search")
+                SearchView()
             }
             .tabItem {
                 Label("Search", systemImage: "magnifyingglass")
             }
+            .tag(AppTab.search)
 
             navigationContainer {
                 PlaceholderTabView(title: "Seasons", systemImage: "calendar")
@@ -389,6 +425,7 @@ struct ContentView: View {
             .tabItem {
                 Label("Seasons", systemImage: "calendar")
             }
+            .tag(AppTab.seasons)
 
             navigationContainer {
                 MyListView()
@@ -396,13 +433,15 @@ struct ContentView: View {
             .tabItem {
                 Label("My List", systemImage: "bookmark")
             }
+            .tag(AppTab.myList)
 
             navigationContainer {
-                ProfileView(colorScheme: colorScheme)
+                ProfileView(colorScheme: colorScheme, selectedTab: $selectedTab)
             }
             .tabItem {
                 Label("Profile", systemImage: "person.crop.circle")
             }
+            .tag(AppTab.profile)
         }
     }
 
@@ -431,6 +470,1058 @@ struct ContentView: View {
         } catch {
             print("Failed to load Action Anime:", error)
         }
+    }
+}
+
+struct MediaDetailView: View {
+    let item: ContentView.Anime
+    var listEntry: MyListEntry?
+
+    @State private var detailResponse: MediaDetailResponse?
+    @State private var isLoadingDetails = false
+    @State private var detailErrorMessage: String?
+
+    private var media: ContentView.Anime {
+        detailResponse?.media ?? item
+    }
+
+    private var displayTitle: String {
+        media.title_english?.isEmpty == false ? media.title_english! : media.title
+    }
+
+    private var originalTitle: String? {
+        guard let english = media.title_english, !english.isEmpty, english != media.title else { return nil }
+        return media.title
+    }
+
+    private var progressTotal: Int {
+        if media.media_type == "manga" {
+            return media.chapters ?? 0
+        }
+        return media.episodes ?? 0
+    }
+
+    private var progressLabel: String {
+        media.media_type == "manga" ? "Chapters" : "Episodes"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                metrics
+                trackingSummary
+                facts
+                alternateTitles
+                productionInfo
+                genres
+                synopsis
+                backgroundInfo
+                relations
+                characters
+                themeSongs
+                externalLinks
+            }
+            .padding()
+        }
+        .navigationTitle(displayTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .background(Color(.systemBackground))
+        .overlay {
+            if isLoadingDetails && detailResponse == nil {
+                ProgressView()
+                    .padding()
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+        .task {
+            await loadDetails()
+        }
+        .refreshable {
+            await loadDetails()
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if let bannerURLString = media.banner_image_url, let bannerURL = URL(string: bannerURLString) {
+                detailImage(url: bannerURL, aspectRatio: 16.0 / 9.0)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+
+            HStack(alignment: .top, spacing: 14) {
+                if let imageURLString = detailResponse?.coverImageURL ?? media.image_url, let imageURL = URL(string: imageURLString) {
+                    detailImage(url: imageURL, aspectRatio: 2.0 / 3.0)
+                        .frame(width: 118)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .shadow(color: .black.opacity(0.16), radius: 12, y: 8)
+                } else {
+                    posterPlaceholder
+                        .frame(width: 118, height: 177)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(displayTitle)
+                        .font(.title2.bold())
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let originalTitle {
+                        Text(originalTitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Text(metaLine)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let status = listEntry?.status {
+                        StatusBadge(status: status)
+                    }
+                }
+            }
+        }
+    }
+
+    private var metrics: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 10)], spacing: 10) {
+            MetricPill(title: "Score", value: scoreText, color: .pink)
+            MetricPill(title: "Rank", value: rankText, color: .cyan)
+            MetricPill(title: "Popularity", value: popularityText, color: .mint)
+            MetricPill(title: progressLabel, value: progressTotal > 0 ? "\(progressTotal)" : "-", color: .orange)
+        }
+    }
+
+    @ViewBuilder
+    private var trackingSummary: some View {
+        if let listEntry {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Your Progress")
+                    .font(.headline)
+
+                HStack(spacing: 10) {
+                    MetricPill(title: "Progress", value: progressText(for: listEntry), color: .cyan)
+                    MetricPill(title: "Rating", value: listEntry.score10.map { String(format: "%.1f", $0) } ?? "-", color: .pink)
+                    MetricPill(title: "Favorite", value: listEntry.favorite ? "Yes" : "No", color: .mint)
+                }
+            }
+        }
+    }
+
+    private var facts: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Details")
+                    .font(.headline)
+                if isLoadingDetails {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 10)], spacing: 10) {
+                factTile(title: "Format", value: nonEmpty(media.type, fallback: media.media_type?.capitalized ?? "-"))
+                factTile(title: media.media_type == "manga" ? "Published" : "Aired", value: detailDateText)
+                if media.media_type == "manga" {
+                    factTile(title: "Chapters", value: formattedCount(detailChapters))
+                    factTile(title: "Volumes", value: formattedCount(detailVolumes))
+                } else {
+                    factTile(title: "Source", value: detailSource)
+                    factTile(title: "Duration", value: detailDuration)
+                }
+                factTile(title: "Members", value: formattedCount(detailMembersCount))
+                factTile(title: "Favorites", value: formattedCount(detailFavoritesCount))
+                factTile(title: "Scored By", value: formattedCount(detailScoredBy))
+            }
+
+            if let detailErrorMessage {
+                Text(detailErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var genres: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Genres")
+                .font(.headline)
+
+            if let genres = media.genres, !genres.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(genres, id: \.name) { genre in
+                            Text(genre.name)
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.cyan.opacity(0.14), in: Capsule())
+                                .foregroundStyle(Color.cyan)
+                        }
+                    }
+                }
+            } else {
+                Text("No genres available.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var alternateTitles: some View {
+        let titles = detailResponse?.titles ?? media.raw?.titles ?? []
+        if !titles.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Titles")
+                    .font(.headline)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(titles) { title in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(title.type)
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 82, alignment: .leading)
+                            Text(title.title)
+                                .font(.subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var productionInfo: some View {
+        let rows = productionRows
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(media.media_type == "manga" ? "Publication" : "Production")
+                    .font(.headline)
+
+                VStack(spacing: 8) {
+                    ForEach(rows, id: \.title) { row in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(row.title)
+                                .font(.caption.bold())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 88, alignment: .leading)
+                            Text(row.value)
+                                .font(.subheadline)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var synopsis: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Synopsis")
+                .font(.headline)
+            Text(nonEmpty(media.synopsis, fallback: "No synopsis available."))
+                .font(.body)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var backgroundInfo: some View {
+        let background = nonEmpty(media.raw?.background, fallback: "")
+        if !background.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Background")
+                    .font(.headline)
+                Text(background)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var relations: some View {
+        if let relationGroups = detailResponse?.relations, !relationGroups.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Related")
+                    .font(.headline)
+
+                VStack(spacing: 10) {
+                    ForEach(relationGroups) { group in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(group.relation)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.secondary)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 10) {
+                                    ForEach(group.entries) { entry in
+                                        RelationCard(entry: entry)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var characters: some View {
+        if let characters = detailResponse?.characters, !characters.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Characters")
+                    .font(.headline)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(characters.prefix(12)) { character in
+                            CharacterCard(character: character)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var themeSongs: some View {
+        if let themes = detailResponse?.themes, !themes.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Theme Songs")
+                    .font(.headline)
+
+                if !themes.openings.isEmpty {
+                    songList(title: "Openings", songs: themes.openings)
+                }
+                if !themes.endings.isEmpty {
+                    songList(title: "Endings", songs: themes.endings)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var externalLinks: some View {
+        let links = detailResponse?.external ?? media.raw?.external ?? []
+        let streaming = detailResponse?.streaming ?? media.raw?.streaming ?? []
+        if !links.isEmpty || !streaming.isEmpty || detailResponse?.url != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Links")
+                    .font(.headline)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        if let urlString = detailResponse?.url, let url = URL(string: urlString) {
+                            Link("MyAnimeList", destination: url)
+                                .buttonStyle(.bordered)
+                        }
+                        ForEach(streaming.prefix(4)) { link in
+                            if let url = URL(string: link.url) {
+                                Link(link.name, destination: url)
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+                        ForEach(links.prefix(4)) { link in
+                            if let url = URL(string: link.url) {
+                                Link(link.name, destination: url)
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var metaLine: String {
+        var parts: [String] = []
+        if let mediaType = media.media_type?.capitalized {
+            parts.append(mediaType)
+        } else if let type = media.type, !type.isEmpty {
+            parts.append(type)
+        }
+        if let year = media.year, year > 0 {
+            parts.append(String(year))
+        }
+        if let season = media.season, !season.isEmpty {
+            parts.append(season.capitalized)
+        }
+        if let status = media.status, !status.isEmpty {
+            parts.append(status)
+        }
+        if let rating = media.rating, !rating.isEmpty {
+            parts.append(rating)
+        }
+        return parts.joined(separator: " • ")
+    }
+
+    private var scoreText: String {
+        if let score = media.asunatracks_score?.rating {
+            return String(format: "%.1f", score)
+        }
+        if let score = media.score {
+            return String(format: "%.1f", score)
+        }
+        return "-"
+    }
+
+    private var rankText: String {
+        guard let rank = media.rank, rank > 0 else { return "-" }
+        return "#\(rank)"
+    }
+
+    private var popularityText: String {
+        guard let popularity = media.popularity, popularity > 0 else { return "-" }
+        return "#\(popularity)"
+    }
+
+    private var detailSource: String {
+        nonEmpty(detailResponse?.source ?? media.raw?.source, fallback: "-")
+    }
+
+    private var detailDuration: String {
+        nonEmpty(detailResponse?.duration ?? media.raw?.duration, fallback: "-")
+    }
+
+    private var detailDateText: String {
+        let rawDate = media.media_type == "manga" ? media.raw?.published?.string : media.raw?.aired?.string
+        if let rawDate = rawDate, !rawDate.isEmpty {
+            return rawDate
+        }
+        if let startDate = media.start_date, !startDate.isEmpty {
+            if let endDate = media.end_date, !endDate.isEmpty {
+                return "\(shortDate(startDate)) to \(shortDate(endDate))"
+            }
+            return shortDate(startDate)
+        }
+        return "-"
+    }
+
+    private var detailChapters: Int? {
+        media.chapters.flatMap { $0 > 0 ? $0 : nil } ?? media.raw?.chapters
+    }
+
+    private var detailVolumes: Int? {
+        media.volumes.flatMap { $0 > 0 ? $0 : nil } ?? media.raw?.volumes
+    }
+
+    private var detailMembersCount: Int? {
+        detailResponse?.membersCount ?? media.raw?.members
+    }
+
+    private var detailFavoritesCount: Int? {
+        detailResponse?.favoritesCount ?? media.raw?.favorites
+    }
+
+    private var detailScoredBy: Int? {
+        detailResponse?.scoredBy ?? media.raw?.scored_by
+    }
+
+    private var productionRows: [(title: String, value: String)] {
+        var rows: [(title: String, value: String)] = []
+        appendResources(&rows, title: "Studios", resources: detailResponse?.studios ?? media.raw?.studios)
+        appendResources(&rows, title: "Producers", resources: detailResponse?.producers ?? media.raw?.producers)
+        appendResources(&rows, title: "Licensors", resources: detailResponse?.licensors ?? media.raw?.licensors)
+        appendResources(&rows, title: "Authors", resources: detailResponse?.authors ?? media.raw?.authors)
+        appendResources(&rows, title: "Serializations", resources: detailResponse?.serializations ?? media.raw?.serializations)
+        return rows
+    }
+
+    private func progressText(for entry: MyListEntry) -> String {
+        let current = entry.progress ?? 0
+        if progressTotal > 0 {
+            return "\(current)/\(progressTotal)"
+        }
+        return "\(current)"
+    }
+
+    private func nonEmpty(_ value: String?, fallback: String) -> String {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    private func formattedCount(_ value: Int?) -> String {
+        guard let value, value > 0 else { return "-" }
+        return value.formatted()
+    }
+
+    private func shortDate(_ value: String) -> String {
+        value.components(separatedBy: "T").first ?? value
+    }
+
+    private func appendResources(_ rows: inout [(title: String, value: String)], title: String, resources: [MediaNamedResource]?) {
+        let names = resources?.map(\.name).filter { !$0.isEmpty } ?? []
+        if !names.isEmpty {
+            rows.append((title: title, value: names.joined(separator: ", ")))
+        }
+    }
+
+    private func factTile(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(nonEmpty(value, fallback: "-"))
+                .font(.subheadline.bold())
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func songList(title: String, songs: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline.bold())
+                .foregroundStyle(.secondary)
+            ForEach(Array(songs.prefix(4).enumerated()), id: \.offset) { _, song in
+                Text(song)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func loadDetails() async {
+        guard let mediaType = item.media_type, mediaType == "anime" || mediaType == "manga" else { return }
+        isLoadingDetails = true
+        defer { isLoadingDetails = false }
+
+        do {
+            let url = URL(string: "https://asunatracks.space/public/api/\(mediaType)/\(item.id)")!
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+
+            detailResponse = try JSONDecoder().decode(MediaDetailResponse.self, from: data)
+            detailErrorMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            detailErrorMessage = "More details could not be loaded."
+        }
+    }
+
+    private func detailImage(url: URL, aspectRatio: CGFloat) -> some View {
+        GeometryReader { proxy in
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                case .failure:
+                    posterPlaceholder
+                @unknown default:
+                    posterPlaceholder
+                }
+            }
+        }
+        .aspectRatio(aspectRatio, contentMode: .fit)
+    }
+
+    private var posterPlaceholder: some View {
+        ZStack {
+            Color.secondary.opacity(0.12)
+            Image(systemName: "photo")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct MediaDetailResponse: Decodable {
+    let media: ContentView.Anime
+    let relations: [MediaRelation]?
+    let characters: [MediaCharacter]?
+    let themes: MediaThemes?
+    let external: [MediaLink]?
+    let streaming: [MediaLink]?
+    let titles: [MediaTitle]?
+    let coverImageURL: String?
+    let studios: [MediaNamedResource]?
+    let producers: [MediaNamedResource]?
+    let licensors: [MediaNamedResource]?
+    let authors: [MediaNamedResource]?
+    let serializations: [MediaNamedResource]?
+    let source: String?
+    let duration: String?
+    let url: String?
+    let favoritesCount: Int?
+    let membersCount: Int?
+    let scoredBy: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case media
+        case relations
+        case characters
+        case themes
+        case external
+        case streaming
+        case titles
+        case coverImageURL = "cover_image_url"
+        case studios
+        case producers
+        case licensors
+        case authors
+        case serializations
+        case source
+        case duration
+        case url
+        case favoritesCount = "favorites_count"
+        case membersCount = "members_count"
+        case scoredBy = "scored_by"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        media = try container.decode(ContentView.Anime.self, forKey: .media)
+        relations = try? container.decode([MediaRelation].self, forKey: .relations)
+        characters = try? container.decode([MediaCharacter].self, forKey: .characters)
+        themes = try? container.decode(MediaThemes.self, forKey: .themes)
+        external = try? container.decode([MediaLink].self, forKey: .external)
+        streaming = try? container.decode([MediaLink].self, forKey: .streaming)
+        titles = try? container.decode([MediaTitle].self, forKey: .titles)
+        coverImageURL = try? container.decode(String.self, forKey: .coverImageURL)
+        studios = try? container.decode([MediaNamedResource].self, forKey: .studios)
+        producers = try? container.decode([MediaNamedResource].self, forKey: .producers)
+        licensors = try? container.decode([MediaNamedResource].self, forKey: .licensors)
+        authors = try? container.decode([MediaNamedResource].self, forKey: .authors)
+        serializations = try? container.decode([MediaNamedResource].self, forKey: .serializations)
+        source = try? container.decode(String.self, forKey: .source)
+        duration = try? container.decode(String.self, forKey: .duration)
+        url = try? container.decode(String.self, forKey: .url)
+        favoritesCount = try? container.decode(Int.self, forKey: .favoritesCount)
+        membersCount = try? container.decode(Int.self, forKey: .membersCount)
+        scoredBy = try? container.decode(Int.self, forKey: .scoredBy)
+    }
+}
+
+struct MediaRelation: Identifiable, Decodable {
+    let relation: String
+    let entries: [MediaRelationEntry]
+
+    var id: String {
+        relation + entries.map { "\($0.id)" }.joined(separator: "-")
+    }
+}
+
+struct MediaRelationEntry: Identifiable, Decodable {
+    let id: Int
+    let malID: Int?
+    let type: String?
+    let name: String
+    let url: String?
+    let imageURL: String?
+    let mediaType: String?
+    let titleEnglish: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case malID = "mal_id"
+        case type
+        case name
+        case url
+        case imageURL = "image_url"
+        case mediaType = "media_type"
+        case titleEnglish = "title_english"
+    }
+}
+
+struct MediaCharacter: Identifiable, Decodable {
+    let id: Int
+    let malID: Int?
+    let name: String
+    let nameKanji: String?
+    let imageURL: String?
+    let role: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case malID = "mal_id"
+        case name
+        case nameKanji = "name_kanji"
+        case imageURL = "image_url"
+        case role
+    }
+}
+
+struct MediaThemes: Decodable {
+    let openings: [String]
+    let endings: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case openings
+        case endings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        openings = (try? container.decode([String].self, forKey: .openings)) ?? []
+        endings = (try? container.decode([String].self, forKey: .endings)) ?? []
+    }
+
+    var isEmpty: Bool {
+        openings.isEmpty && endings.isEmpty
+    }
+}
+
+struct MediaTitle: Identifiable, Decodable {
+    let type: String
+    let title: String
+
+    var id: String { type + title }
+}
+
+struct MediaLink: Identifiable, Decodable {
+    let name: String
+    let url: String
+
+    var id: String { name + url }
+}
+
+struct MediaNamedResource: Identifiable, Decodable {
+    let malID: Int?
+    let name: String
+    let url: String?
+
+    var id: String {
+        "\(malID ?? 0)-\(name)"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case malID = "mal_id"
+        case name
+        case url
+    }
+}
+
+struct RelationCard: View {
+    let entry: MediaRelationEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            relationImage
+                .frame(width: 88, height: 124)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            Text(entry.titleEnglish?.isEmpty == false ? entry.titleEnglish! : entry.name)
+                .font(.caption.bold())
+                .lineLimit(2)
+                .frame(width: 88, alignment: .leading)
+
+            if let type = entry.mediaType ?? entry.type {
+                Text(type.capitalized)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 88, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var relationImage: some View {
+        if let imageURL = entry.imageURL, let url = URL(string: imageURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    imagePlaceholder
+                @unknown default:
+                    imagePlaceholder
+                }
+            }
+        } else {
+            imagePlaceholder
+        }
+    }
+
+    private var imagePlaceholder: some View {
+        ZStack {
+            Color.secondary.opacity(0.12)
+            Image(systemName: "photo")
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct CharacterCard: View {
+    let character: MediaCharacter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            characterImage
+                .frame(width: 78, height: 78)
+                .clipped()
+                .clipShape(Circle())
+
+            Text(character.name)
+                .font(.caption.bold())
+                .lineLimit(2)
+                .frame(width: 96, alignment: .leading)
+
+            if let role = character.role {
+                Text(role)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(width: 96, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var characterImage: some View {
+        if let imageURL = character.imageURL, let url = URL(string: imageURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    imagePlaceholder
+                @unknown default:
+                    imagePlaceholder
+                }
+            }
+        } else {
+            imagePlaceholder
+        }
+    }
+
+    private var imagePlaceholder: some View {
+        ZStack {
+            Color.secondary.opacity(0.12)
+            Image(systemName: "person")
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+enum SearchMediaType: String, CaseIterable, Identifiable {
+    case anime
+    case manga
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .anime: "Anime"
+        case .manga: "Manga"
+        }
+    }
+
+    var endpoint: String {
+        switch self {
+        case .anime: "https://asunatracks.space/public/api/anime"
+        case .manga: "https://asunatracks.space/public/api/manga"
+        }
+    }
+}
+
+struct SearchView: View {
+    @State private var mediaType: SearchMediaType = .anime
+    @State private var query = ""
+    @State private var items: [ContentView.Anime] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 150), spacing: 14)
+    ]
+
+    private var searchKey: String {
+        "\(mediaType.rawValue)-\(query)"
+    }
+
+    var body: some View {
+        Group {
+            if isLoading && items.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let errorMessage {
+                MyListStateView(
+                    systemImage: "magnifyingglass",
+                    title: "Search failed",
+                    message: errorMessage,
+                    retryTitle: "Retry",
+                    retry: { Task { await searchNow() } }
+                )
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 18) {
+                        ForEach(items) { item in
+                            SearchPosterCard(item: item)
+                        }
+                    }
+                    .padding()
+
+                    if items.isEmpty {
+                        MyListStateView(
+                            systemImage: "sparkle.magnifyingglass",
+                            title: "No matches",
+                            message: "Try a different title, synonym, or genre."
+                        )
+                        .frame(minHeight: 260)
+                    }
+                }
+                .refreshable {
+                    await searchNow()
+                }
+            }
+        }
+        .navigationTitle("Search")
+        .safeAreaInset(edge: .top) {
+            Picker("Type", selection: $mediaType) {
+                ForEach(SearchMediaType.allCases) { type in
+                    Text(type.title).tag(type)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(.bar)
+        }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search titles")
+        .background(Color(.systemBackground))
+        .task(id: searchKey) {
+            if !query.isEmpty {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            guard !Task.isCancelled else { return }
+            await searchNow()
+        }
+    }
+
+    private func searchNow() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            var components = URLComponents(string: mediaType.endpoint)!
+            components.queryItems = [
+                URLQueryItem(name: "q", value: query),
+                URLQueryItem(name: "limit", value: "50")
+            ]
+
+            let (data, response) = try await URLSession.shared.data(from: components.url!)
+            guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+
+            let decoder = JSONDecoder()
+            if let envelope = try? decoder.decode(ContentView.APIResponse.self, from: data) {
+                items = envelope.items
+            } else {
+                items = try decoder.decode([ContentView.Anime].self, from: data)
+            }
+            errorMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+struct SearchPosterCard: View {
+    let item: ContentView.Anime
+
+    var body: some View {
+        NavigationLink {
+            MediaDetailView(item: item)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .topLeading) {
+                    GeometryReader { proxy in
+                        poster
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+                    }
+                    .aspectRatio(2 / 3, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    Text(item.tagText)
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(8)
+                }
+
+                Text(displayTitle)
+                    .font(.headline)
+                    .lineLimit(2)
+
+                Text(item.infoLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var poster: some View {
+        if let urlString = item.image_url, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    posterPlaceholder
+                @unknown default:
+                    posterPlaceholder
+                }
+            }
+        } else {
+            posterPlaceholder
+        }
+    }
+
+    private var posterPlaceholder: some View {
+        ZStack {
+            Color.secondary.opacity(0.12)
+            Image(systemName: "photo")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var displayTitle: String {
+        item.title_english?.isEmpty == false ? item.title_english! : item.title
     }
 }
 
@@ -536,7 +1627,11 @@ struct MyListView: View {
 
                     Section {
                         ForEach(filteredEntries) { entry in
-                            MyListEntryRow(entry: entry)
+                            NavigationLink {
+                                MediaDetailView(item: entry.media, listEntry: entry)
+                            } label: {
+                                MyListEntryRow(entry: entry)
+                            }
                         }
                     }
                 }
@@ -626,6 +1721,7 @@ struct MyListEntryRow: View {
         HStack(spacing: 12) {
             poster
                 .frame(width: 56, height: 78)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 6) {
@@ -785,6 +1881,8 @@ struct MyListStateView: View {
     }
 }
 
+typealias ScreenStateView = MyListStateView
+
 struct HiddenScrollContentBackground: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 16.0, *) {
@@ -814,6 +1912,7 @@ struct PlaceholderTabView: View {
 
 struct ProfileView: View {
     let colorScheme: ColorScheme
+    @Binding var selectedTab: AppTab
     
     @AppStorage("authToken") private var authToken: String = ""
     @AppStorage("authUsername") private var authUsername: String = ""
@@ -902,13 +2001,21 @@ struct ProfileView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 20)
                     VStack(spacing: 10) {
-                        NavigationLink { Text("My List") } label: {
+                        Button {
+                            selectedTab = .myList
+                        } label: {
                             row(icon: "bookmark", title: "My List")
                         }
-                        NavigationLink { Text("Search") } label: {
+                        
+                        Button {
+                            selectedTab = .search
+                        } label: {
                             row(icon: "magnifyingglass", title: "Search")
                         }
-                        NavigationLink { Text("Seasonal Charts") } label: {
+                        
+                        Button {
+                            selectedTab = .seasons
+                        } label: {
                             row(icon: "calendar", title: "Seasonal Charts")
                         }
                     }
@@ -1092,7 +2199,6 @@ async function signin(){
     try { data = JSON.parse(text); } catch(e) { throw new Error('Unexpected response'); }
     if(res.ok && data && data.token){
       status.innerHTML = '<div class="success">Signed in as <b>'+(data.user?.username || u)+'</b>. Token received.</div>';
-      // Optionally, postMessage to the app. The host app can intercept this if needed.
       try { window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.login && window.webkit.messageHandlers.login.postMessage(data); } catch(e){}
     } else {
       const msg = (data && (data.error || data.message)) || 'Wrong username or password.';
@@ -1147,7 +2253,6 @@ async function signin(){
                         if let username = user["username"] as? String { parent.authUsername = username }
                         if let avatar = user["avatar_url"] as? String { parent.authAvatarURL = avatar }
                     }
-                    // Dismiss sheet after login
                     parent.isPresented = false
                 }
             }
