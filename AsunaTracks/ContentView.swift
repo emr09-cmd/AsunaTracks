@@ -6,7 +6,12 @@
 //
 
 import SwiftUI
+#if os(iOS)
 import WebKit
+#endif
+import UIKit
+
+#if os(iOS)
 
 // MARK: - Tab Identifier
 enum AppTab: Hashable {
@@ -401,47 +406,22 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            navigationContainer {
-                discoverView
-                    .navigationTitle("Discover")
+            ForEach(TabItem.ordered(midSlots: TabOrderStore.load())) { tab in
+                tabContent(for: tab)
+                    .tabItem { Label(tab.label, systemImage: tab.systemImage) }
             }
-            .tabItem {
-                Label("Discover", systemImage: "house.fill")
-            }
-            .tag(AppTab.discover)
+        }
+    }
 
-            navigationContainer {
-                SearchView()
-            }
-            .tabItem {
-                Label("Search", systemImage: "magnifyingglass")
-            }
-            .tag(AppTab.search)
-
-            navigationContainer {
-                PlaceholderTabView(title: "Seasons", systemImage: "calendar")
-                    .navigationTitle("Seasons")
-            }
-            .tabItem {
-                Label("Seasons", systemImage: "calendar")
-            }
-            .tag(AppTab.seasons)
-
-            navigationContainer {
-                MyListView()
-            }
-            .tabItem {
-                Label("My List", systemImage: "bookmark")
-            }
-            .tag(AppTab.myList)
-
-            navigationContainer {
-                ProfileView(colorScheme: colorScheme, selectedTab: $selectedTab)
-            }
-            .tabItem {
-                Label("Profile", systemImage: "person.crop.circle")
-            }
-            .tag(AppTab.profile)
+    @ViewBuilder
+    private func tabContent(for tab: TabItem) -> some View {
+        switch tab.id {
+        case "discover": navigationContainer { discoverView.navigationTitle("Discover") }.tag(AppTab.discover)
+        case "search": navigationContainer { SearchView() }.tag(AppTab.search)
+        case "seasons": navigationContainer { PlaceholderTabView(title: "Seasons", systemImage: "calendar").navigationTitle("Seasons") }.tag(AppTab.seasons)
+        case "myList": navigationContainer { MyListView() }.tag(AppTab.myList)
+        case "profile": navigationContainer { ProfileView(colorScheme: colorScheme, selectedTab: $selectedTab) }.tag(AppTab.profile)
+        default: EmptyView()
         }
     }
 
@@ -822,18 +802,18 @@ struct MediaDetailView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         if let urlString = detailResponse?.url, let url = URL(string: urlString) {
-                            Link("MyAnimeList", destination: url)
+                            Button("MyAnimeList") { UniversalLinkOpener.open(url) }
                                 .buttonStyle(.bordered)
                         }
                         ForEach(streaming.prefix(4)) { link in
                             if let url = URL(string: link.url) {
-                                Link(link.name, destination: url)
+                                Button(link.name) { UniversalLinkOpener.open(url) }
                                     .buttonStyle(.bordered)
                             }
                         }
                         ForEach(links.prefix(4)) { link in
                             if let url = URL(string: link.url) {
-                                Link(link.name, destination: url)
+                                Button(link.name) { UniversalLinkOpener.open(url) }
                                     .buttonStyle(.bordered)
                             }
                         }
@@ -1562,24 +1542,60 @@ struct MyListEntry: Identifiable, Decodable {
         case entryID = "entry_id"
         case status
         case progress
+        case progressEpisodes = "progress_episodes"
+        case episodesWatched = "episodes_watched"
+        case progressChapters = "progress_chapters"
+        case chaptersRead = "chapters_read"
         case progressVolumes = "progress_volumes"
+        case volumesRead = "volumes_read"
         case score10 = "score_10"
         case rating
         case favorite
         case media
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        entryID = try container.decode(Int.self, forKey: .entryID)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        let progressKeys: [CodingKeys] = [.progress, .progressEpisodes, .episodesWatched, .progressChapters, .chaptersRead]
+        var decodedProgress: Int?
+        for key in progressKeys where decodedProgress == nil {
+            decodedProgress = try container.decodeIfPresent(Int.self, forKey: key)
+        }
+        progress = decodedProgress
+        var decodedVolumes = try container.decodeIfPresent(Int.self, forKey: .progressVolumes)
+        if decodedVolumes == nil {
+            decodedVolumes = try container.decodeIfPresent(Int.self, forKey: .volumesRead)
+        }
+        progressVolumes = decodedVolumes
+        score10 = try container.decodeIfPresent(Double.self, forKey: .score10)
+        rating = try container.decodeIfPresent(Double.self, forKey: .rating)
+        favorite = try container.decodeIfPresent(Bool.self, forKey: .favorite) ?? false
+        media = try container.decode(ContentView.Anime.self, forKey: .media)
+    }
+
+    func updatingProgress(_ newProgress: Int) -> MyListEntry {
+        MyListEntry(entryID: entryID, status: status, progress: newProgress, progressVolumes: progressVolumes, score10: score10, rating: rating, favorite: favorite, media: media)
+    }
+
+    private init(entryID: Int, status: String?, progress: Int?, progressVolumes: Int?, score10: Double?, rating: Double?, favorite: Bool, media: ContentView.Anime) {
+        self.entryID = entryID; self.status = status; self.progress = progress; self.progressVolumes = progressVolumes
+        self.score10 = score10; self.rating = rating; self.favorite = favorite; self.media = media
+    }
 }
 
 struct MyListView: View {
-    @AppStorage("authToken") private var authToken: String = ""
+    @AppStorage("isUserSignedIn") private var isUserSignedIn: Bool = false
 
     @State private var filter: LibraryFilter = .all
     @State private var entries: [MyListEntry] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var pendingProgressUpdates: [Int: Task<Void, Never>] = [:]
 
     private var isSignedIn: Bool {
-        !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isUserSignedIn && KeychainVault.readToken() != nil
     }
 
     private var filteredEntries: [MyListEntry] {
@@ -1630,7 +1646,7 @@ struct MyListView: View {
                             NavigationLink {
                                 MediaDetailView(item: entry.media, listEntry: entry)
                             } label: {
-                                MyListEntryRow(entry: entry)
+                                MyListEntryRow(entry: entry, incrementProgress: { incrementProgress(for: entry.id) })
                             }
                         }
                     }
@@ -1655,7 +1671,7 @@ struct MyListView: View {
             .background(.bar)
         }
         .background(Color(.systemBackground))
-        .task(id: authToken) {
+        .task(id: isUserSignedIn) {
             if isSignedIn {
                 await loadList()
             } else {
@@ -1697,6 +1713,11 @@ struct MyListView: View {
 
             let decoded = try JSONDecoder().decode(MyListResponse.self, from: data)
             entries = decoded.items
+            for (mediaID, count) in WidgetListStore.pendingIncrements() {
+                guard let entryID = entries.first(where: { $0.media.id == mediaID })?.id else { continue }
+                for _ in 0..<count { incrementProgress(for: entryID) }
+            }
+            WidgetListStore.save(entries: entries)
             errorMessage = nil
         } catch is CancellationError {
             return
@@ -1706,16 +1727,56 @@ struct MyListView: View {
     }
 
     private func authorizationHeaderValue() -> String {
-        let token = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = (KeychainVault.readToken() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if token.lowercased().hasPrefix("bearer ") {
             return token
         }
         return "Bearer \(token)"
     }
+
+    private func incrementProgress(for entryID: Int) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let entry = entries[index]
+        let current = entry.progress ?? 0
+        let maximum = entry.media.media_type == "manga" ? (entry.media.chapters ?? 0) : (entry.media.episodes ?? 0)
+        guard maximum == 0 || current < maximum else { return }
+
+        let updated = entry.updatingProgress(current + 1)
+        entries[index] = updated
+        pendingProgressUpdates[entryID]?.cancel()
+        pendingProgressUpdates[entryID] = Task {
+            try? await Task.sleep(for: .milliseconds(550))
+            guard !Task.isCancelled else { return }
+            await saveProgress(for: updated)
+        }
+    }
+
+    private func saveProgress(for entry: MyListEntry) async {
+        guard let type = entry.media.media_type, let url = URL(string: "https://asunatracks.space/public/api/me/list") else { return }
+        var payload: [String: Any] = ["media_type": type, "media_id": entry.media.id, "status": entry.status ?? (type == "manga" ? "reading" : "watching")]
+        payload[type == "manga" ? "progress_chapters" : "progress_episodes"] = entry.progress ?? 0
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue(authorizationHeaderValue(), forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
+            WidgetListStore.save(entries: entries)
+            WidgetListStore.clearPendingIncrement(for: entry.media.id)
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = "Progress could not be saved."
+            await loadList()
+        }
+    }
 }
 
 struct MyListEntryRow: View {
     let entry: MyListEntry
+    let incrementProgress: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -1750,6 +1811,15 @@ struct MyListEntryRow: View {
                         .foregroundColor(.pink)
                 }
             }
+            Spacer(minLength: 4)
+            Divider().frame(height: 52)
+            Button(action: incrementProgress) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title2)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Add one \(entry.media.media_type == "manga" ? "chapter" : "episode")")
         }
         .padding(.vertical, 4)
     }
@@ -1910,11 +1980,12 @@ struct PlaceholderTabView: View {
     }
 }
 
+#if os(iOS)
 struct ProfileView: View {
     let colorScheme: ColorScheme
     @Binding var selectedTab: AppTab
     
-    @AppStorage("authToken") private var authToken: String = ""
+    @AppStorage("isUserSignedIn") private var isUserSignedIn: Bool = false
     @AppStorage("authUsername") private var authUsername: String = ""
     @AppStorage("authAvatarURL") private var authAvatarURL: String = ""
     
@@ -1963,7 +2034,7 @@ struct ProfileView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    if authToken.isEmpty {
+                    if !isUserSignedIn {
                         Button {
                             showSignInSheet = true
                         } label: {
@@ -1977,8 +2048,8 @@ struct ProfileView: View {
                         .tint(.accentColor)
                     } else {
                         Button {
-                            // Sign Out: clear stored values
-                            authToken = ""
+                            KeychainVault.deleteToken()
+                            isUserSignedIn = false
                             authUsername = ""
                             authAvatarURL = ""
                         } label: {
@@ -2001,6 +2072,11 @@ struct ProfileView: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 20)
                     VStack(spacing: 10) {
+                        if isUserSignedIn {
+                            Button { WatchLinkManager.shared.linkExternalDevice() } label: {
+                                row(icon: "applewatch", title: "Link External Device")
+                            }
+                        }
                         Button {
                             selectedTab = .myList
                         } label: {
@@ -2047,7 +2123,7 @@ struct ProfileView: View {
             if #available(iOS 16.0, *) {
                 NavigationStack {
                     InlineHTMLWebView(html: Self.signInHTML,
-                                     authToken: $authToken,
+                                     isSignedIn: $isUserSignedIn,
                                      authUsername: $authUsername,
                                      authAvatarURL: $authAvatarURL,
                                      isPresented: $showSignInSheet)
@@ -2062,7 +2138,7 @@ struct ProfileView: View {
             } else {
                 NavigationView {
                     InlineHTMLWebView(html: Self.signInHTML,
-                                     authToken: $authToken,
+                                     isSignedIn: $isUserSignedIn,
                                      authUsername: $authUsername,
                                      authAvatarURL: $authAvatarURL,
                                      isPresented: $showSignInSheet)
@@ -2218,7 +2294,7 @@ async function signin(){
     
     struct InlineHTMLWebView: UIViewRepresentable {
         let html: String
-        @Binding var authToken: String
+        @Binding var isSignedIn: Bool
         @Binding var authUsername: String
         @Binding var authAvatarURL: String
         @Binding var isPresented: Bool
@@ -2248,11 +2324,12 @@ async function signin(){
             func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
                 guard message.name == "login" else { return }
                 if let dict = message.body as? [String: Any] {
-                    if let token = dict["token"] as? String { parent.authToken = token }
+                    guard let token = dict["token"] as? String, KeychainVault.saveToken(token) else { return }
                     if let user = dict["user"] as? [String: Any] {
                         if let username = user["username"] as? String { parent.authUsername = username }
                         if let avatar = user["avatar_url"] as? String { parent.authAvatarURL = avatar }
                     }
+                    parent.isSignedIn = true
                     parent.isPresented = false
                 }
             }
@@ -2260,6 +2337,20 @@ async function signin(){
     }
 }
 
+#else
+struct ProfileView: View {
+    let colorScheme: ColorScheme
+    @Binding var selectedTab: AppTab
+    var body: some View {
+        ContentUnavailableView("Profile is available on iPhone", systemImage: "person.crop.circle")
+    }
+}
+#endif
+
 #Preview {
     ContentView()
 }
+#else
+enum AppTab: Hashable { case discover, search, seasons, myList, profile }
+struct ContentView: View { var body: some View { ContentUnavailableView("AsunaTracks is available on iPhone", systemImage: "iphone") } }
+#endif

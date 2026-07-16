@@ -6,6 +6,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if os(iOS)
+
 // MARK: - Tab Order Persistence
 
 struct TabOrderStore {
@@ -108,7 +110,7 @@ struct OnboardingView: View {
     private let shouldPersistSetup: Bool = true
 
     @AppStorage("hasCompletedSetup") private var hasCompletedSetup: Bool = false
-    @AppStorage("authToken")         private var authToken:          String = ""
+    @AppStorage("isUserSignedIn")    private var isUserSignedIn:     Bool = false
     @AppStorage("authUsername")      private var authUsername:        String = ""
     @AppStorage("authAvatarURL")     private var authAvatarURL:       String = ""
 
@@ -126,7 +128,7 @@ struct OnboardingView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var isLastPage: Bool { currentPage == onboardingPages.count - 1 }
-    private var isSignedIn: Bool { !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var isSignedIn: Bool { isUserSignedIn }
 
     // MARK: - Body
 
@@ -152,8 +154,8 @@ struct OnboardingView: View {
                     .padding(.bottom, 48)
             }
         }
-        .onChange(of: authToken) { _ in
-            if !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        .onChange(of: isUserSignedIn) { signedIn in
+            if signedIn {
                 showSignIn = false
                 finishSetup()
             }
@@ -433,6 +435,7 @@ struct OnboardingView: View {
             impact.impactOccurred()
         }
         // Native drag-and-drop (works immediately once long press fires)
+        #if !os(tvOS) && !os(watchOS)
         .onDrag {
             guard !tab.isLocked else { return NSItemProvider() }
             draggingID = tab.id
@@ -448,6 +451,7 @@ struct OnboardingView: View {
                 onCommit:     { TabOrderStore.save(tabOrder) }
             )
         )
+        #endif
     }
 
     private var glassBackground: some ShapeStyle {
@@ -554,7 +558,7 @@ struct OnboardingView: View {
     private var signInContent: some View {
         ProfileView.InlineHTMLWebView(
             html: ProfileView.signInHTML,
-            authToken: $authToken,
+            isSignedIn: $isUserSignedIn,
             authUsername: $authUsername,
             authAvatarURL: $authAvatarURL,
             isPresented: $showSignIn
@@ -587,6 +591,7 @@ struct OnboardingView: View {
 
 // MARK: - Tab Reorder Delegate
 
+#if !os(tvOS) && !os(watchOS)
 struct TabReorderDelegate: DropDelegate {
     let targetTab:  TabItem
     @Binding var tabOrder:   [String]
@@ -624,6 +629,7 @@ struct TabReorderDelegate: DropDelegate {
         return true
     }
 }
+#endif
 
 // MARK: - Button Styles
 
@@ -658,10 +664,12 @@ struct OnboardingGhostButton: ButtonStyle {
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
+#else
+struct OnboardingView: View { var body: some View { ContentUnavailableView("Complete setup on iPhone", systemImage: "iphone") } }
+#endif
 
 // MARK: - Preview
 
 #Preview("Onboarding") {
     OnboardingView()
 }
-

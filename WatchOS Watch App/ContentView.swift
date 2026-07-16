@@ -8,12 +8,14 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject private var linkManager: WatchLinkManager
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        VStack(spacing: 10) {
+            Image(systemName: linkManager.username.isEmpty ? "qrcode" : "checkmark.circle.fill")
+                .font(.title2).foregroundStyle(.tint)
+            Text(linkManager.username.isEmpty ? "Open AsunaTracks on iPhone and choose Link External Device" : "Linked as \(linkManager.username)")
+                .multilineTextAlignment(.center)
+            if linkManager.username.isEmpty { Text(linkManager.pairingCode.prefix(8)).font(.caption.monospaced()) }
         }
         .padding()
     }
