@@ -152,13 +152,13 @@ struct OnboardingView: View {
                     .padding(.bottom, 48)
             }
         }
-        .onChange(of: authToken) {
+        .onChange(of: authToken) { _ in
             if !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 showSignIn = false
                 finishSetup()
             }
         }
-        .onChange(of: currentPage) {
+        .onChange(of: currentPage) { _ in
             if onboardingPages[currentPage].showsCustomizer {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     withAnimation(.spring(response: 0.6, dampingFraction: 0.72)) {
@@ -664,3 +664,4 @@ struct OnboardingGhostButton: ButtonStyle {
 #Preview("Onboarding") {
     OnboardingView()
 }
+
