@@ -1,4 +1,4 @@
-name: Build IPA
+name: Build AsunaTracks IPA
 
 on:
   release:
@@ -9,38 +9,62 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-ipa:
+    name: Build IPA
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-
-      - name: Build Archive
         run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Show Project Information
+        run: |
+          xcodebuild \
+            -project AsunaTracks.xcodeproj \
+            -scheme AsunaTracks \
+            -showBuildSettings
+
+      - name: Clean Build
+        run: |
+          xcodebuild \
+            clean \
+            -project AsunaTracks.xcodeproj \
+            -scheme AsunaTracks
+
+      - name: Archive App (Unsigned)
+        run: |
+          mkdir -p build
+
           xcodebuild \
             -project AsunaTracks.xcodeproj \
             -scheme AsunaTracks \
             -configuration Release \
             -destination generic/platform=iOS \
             -archivePath build/AsunaTracks.xcarchive \
-            archive
+            archive \
+            CODE_SIGNING_ALLOWED=NO
 
-      - name: Export IPA
+      - name: Create IPA
         run: |
-          xcodebuild \
-            -exportArchive \
-            -archivePath build/AsunaTracks.xcarchive \
-            -exportPath build/export \
-            -exportOptionsPlist ExportOptions.plist
+          mkdir -p build/Payload
 
-      - name: Upload IPA
+          cp -R \
+          build/AsunaTracks.xcarchive/Products/Applications/AsunaTracks.app \
+          build/Payload/
+
+          cd build
+
+          zip -r AsunaTracks.ipa Payload
+
+      - name: Upload IPA To Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/export/*.ipa
+            build/AsunaTracks.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
