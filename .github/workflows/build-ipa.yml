@@ -1,0 +1,46 @@
+name: Build IPA
+
+on:
+  release:
+    types:
+      - created
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Build Archive
+        run: |
+          xcodebuild \
+            -project AsunaTracks.xcodeproj \
+            -scheme AsunaTracks \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -archivePath build/AsunaTracks.xcarchive \
+            archive
+
+      - name: Export IPA
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/AsunaTracks.xcarchive \
+            -exportPath build/export \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Upload IPA
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/export/*.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
