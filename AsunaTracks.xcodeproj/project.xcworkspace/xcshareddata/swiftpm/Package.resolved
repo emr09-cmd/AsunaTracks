@@ -1,0 +1,15 @@
+{
+  "originHash" : "d986755489edd41d907db90a0ac8d59f5d33a251982286b6a99ab3620de5fe3f",
+  "pins" : [
+    {
+      "identity" : "asunatracksupdatealert",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/emr09-cmd/AsunaTracksUpdateAlert",
+      "state" : {
+        "branch" : "main",
+        "revision" : "e36ca1138be4f54d754bbbaa9e69466b26bca525"
+      }
+    }
+  ],
+  "version" : 3
+}

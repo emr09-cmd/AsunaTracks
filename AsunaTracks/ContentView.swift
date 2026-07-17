@@ -10,6 +10,7 @@ import SwiftUI
 import WebKit
 #endif
 import UIKit
+import AsunaTracksUpdateAlert
 
 #if os(iOS)
 
@@ -401,6 +402,7 @@ struct ContentView: View {
                 await fetchManga()
                 await loadActionAnime()
             }
+            AsunaTracksUpdateAlert()
         }
     }
     
@@ -411,6 +413,7 @@ struct ContentView: View {
                     .tabItem { Label(tab.label, systemImage: tab.systemImage) }
             }
         }
+
     }
 
     @ViewBuilder
@@ -2354,3 +2357,4 @@ struct ProfileView: View {
 enum AppTab: Hashable { case discover, search, seasons, myList, profile }
 struct ContentView: View { var body: some View { ContentUnavailableView("AsunaTracks is available on iPhone", systemImage: "iphone") } }
 #endif
+

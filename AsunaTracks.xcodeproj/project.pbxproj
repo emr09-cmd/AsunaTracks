@@ -11,6 +11,7 @@
 		2D6EFDD83009334D005AC03D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D6EFDD73009334D005AC03D /* SwiftUI.framework */; };
 		2D6EFDE93009334F005AC03D /* WidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2D6EFDD33009334D005AC03D /* WidgetsExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2D6EFE1930095AC8005AC03D /* WatchOS Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2D6EFE0F30095AC6005AC03D /* WatchOS Watch App.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2D6EFEE3300A6EF3005AC03D /* AsunaTracksUpdateAlert in Frameworks */ = {isa = PBXBuildFile; productRef = 2D6EFEE2300A6EF3005AC03D /* AsunaTracksUpdateAlert */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -116,6 +117,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2D6EFEE3300A6EF3005AC03D /* AsunaTracksUpdateAlert in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -221,6 +223,7 @@
 			);
 			name = AsunaTracks;
 			packageProductDependencies = (
+				2D6EFEE2300A6EF3005AC03D /* AsunaTracksUpdateAlert */,
 			);
 			productName = AsunaTracks;
 			productReference = 2D771BF92FD41AF8004E632D /* AsunaTracks.app */;
@@ -256,6 +259,9 @@
 			);
 			mainGroup = 2D771BF02FD41AF8004E632D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2D6EFEE1300A6EF3005AC03D /* XCRemoteSwiftPackageReference "AsunaTracksUpdateAlert" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2D771BFA2FD41AF8004E632D /* Products */;
 			projectDirPath = "";
@@ -404,7 +410,7 @@
 				DEVELOPMENT_TEAM = H33PDRFJ5M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = WatchOS;
+				INFOPLIST_KEY_CFBundleDisplayName = AsunaTracks;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.emr09.AsunaTracks;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -437,7 +443,7 @@
 				DEVELOPMENT_TEAM = H33PDRFJ5M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = WatchOS;
+				INFOPLIST_KEY_CFBundleDisplayName = AsunaTracks;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.emr09.AsunaTracks;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -609,7 +615,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5;
+				MARKETING_VERSION = 0.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.emr09.AsunaTracks;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -653,7 +659,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5;
+				MARKETING_VERSION = 0.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.emr09.AsunaTracks;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -711,6 +717,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2D6EFEE1300A6EF3005AC03D /* XCRemoteSwiftPackageReference "AsunaTracksUpdateAlert" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/emr09-cmd/AsunaTracksUpdateAlert";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2D6EFEE2300A6EF3005AC03D /* AsunaTracksUpdateAlert */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2D6EFEE1300A6EF3005AC03D /* XCRemoteSwiftPackageReference "AsunaTracksUpdateAlert" */;
+			productName = AsunaTracksUpdateAlert;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2D771BF12FD41AF8004E632D /* Project object */;
 }
