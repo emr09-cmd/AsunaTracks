@@ -311,8 +311,12 @@ struct ContentView: View {
                         Text("Popular Anime")
                             .font(.title2).bold()
                         Spacer()
-                        Button("See all") {}
-                            .font(.callout)
+                        NavigationLink {
+                            SeeAllMediaView(title: "Popular Anime", baseURLString: "https://asunatracks.space/public/api/anime")
+                        } label: {
+                            Text("See all")
+                                .font(.callout)
+                        }
                     }
                     .padding(.horizontal, 20)
 
@@ -345,8 +349,12 @@ struct ContentView: View {
                         Text("Popular Manga")
                             .font(.title2).bold()
                         Spacer()
-                        Button("See all") {}
-                            .font(.callout)
+                        NavigationLink {
+                            SeeAllMediaView(title: "Popular Manga", baseURLString: "https://asunatracks.space/public/api/manga")
+                        } label: {
+                            Text("See all")
+                                .font(.callout)
+                        }
                     }
                     .padding(.horizontal, 20)
 
@@ -375,9 +383,18 @@ struct ContentView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Action Anime")
-                            .font(.title2).bold()
-                            .padding(.horizontal)
+                        HStack {
+                            Text("Action Anime")
+                                .font(.title2).bold()
+                            Spacer()
+                            NavigationLink {
+                                SeeAllMediaView(title: "Action Anime", baseURLString: "https://asunatracks.space/public/api/anime?genre=13")
+                            } label: {
+                                Text("See all")
+                                    .font(.callout)
+                            }
+                        }
+                        .padding(.horizontal, 20)
 
                         if isLoadingAction {
                             ProgressView()
@@ -452,6 +469,207 @@ struct ContentView: View {
             actionAnime = response.items
         } catch {
             print("Failed to load Action Anime:", error)
+        }
+    }
+}
+
+struct SeeAllMediaView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let title: String
+    let baseURLString: String
+
+    @State private var items: [ContentView.Anime] = []
+    @State private var page = 1
+    @State private var isLoading = false
+    @State private var isLoadingMore = false
+    @State private var errorMessage: String?
+    @State private var reachedEnd = false
+
+    private let pageSize = 24
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14)]
+
+    var body: some View {
+        ZStack {
+            (colorScheme == .dark ? Color(red: 0.07, green: 0.07, blue: 0.07) : Color.white)
+                .ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                if isLoading && items.isEmpty {
+                    ProgressView()
+                        .padding(.top, 80)
+                } else if let errorMessage, items.isEmpty {
+                    ScreenStateView(
+                        systemImage: "wifi.exclamationmark",
+                        title: "Could not load AsunaTracks",
+                        message: errorMessage,
+                        retryTitle: "Retry",
+                        retry: { Task { await load(reset: true) } }
+                    )
+                    .padding(.top, 80)
+                } else if items.isEmpty {
+                    ScreenStateView(
+                        systemImage: "tray",
+                        title: "Nothing here yet",
+                        message: "No titles were found for this section.",
+                        retryTitle: "Retry",
+                        retry: { Task { await load(reset: true) } }
+                    )
+                    .padding(.top, 80)
+                } else {
+                    LazyVGrid(columns: columns, spacing: 20) {
+                        ForEach(items) { item in
+                            card(item)
+                        }
+                    }
+                    .padding(16)
+
+                    if !reachedEnd {
+                        Group {
+                            if isLoadingMore {
+                                ProgressView()
+                            } else {
+                                Button("Load more") {
+                                    Task { await load(reset: false) }
+                                }
+                                .font(.callout)
+                            }
+                        }
+                        .padding(.vertical, 24)
+                    }
+                }
+            }
+        }
+        .navigationTitle(title)
+        .task {
+            if items.isEmpty { await load(reset: true) }
+        }
+    }
+
+    @ViewBuilder
+    private func card(_ item: ContentView.Anime) -> some View {
+        NavigationLink {
+            MediaDetailView(item: item)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                ZStack(alignment: .topLeading) {
+                    Group {
+                        if let urlString = item.image_url, let url = URL(string: urlString) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    Color.gray.opacity(0.15)
+                                        .overlay(ProgressView())
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(2.0/3.0, contentMode: .fill)
+                                case .failure:
+                                    Color.gray.opacity(0.15)
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .font(.largeTitle)
+                                                .foregroundStyle(.secondary)
+                                        )
+                                @unknown default:
+                                    Color.gray.opacity(0.15)
+                                }
+                            }
+                        } else {
+                            Color.gray.opacity(0.15)
+                        }
+                    }
+                    .aspectRatio(2.0/3.0, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                    Text(item.tagText)
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(8)
+                }
+
+                Text(item.title)
+                    .font(.subheadline).bold()
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                Text(item.infoLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func makeURL(page: Int) -> URL? {
+        var components = URLComponents(string: baseURLString)
+        var queryItems = components?.queryItems ?? []
+        queryItems.removeAll { $0.name == "page" || $0.name == "limit" }
+        queryItems.append(URLQueryItem(name: "page", value: String(page)))
+        queryItems.append(URLQueryItem(name: "limit", value: String(pageSize)))
+        components?.queryItems = queryItems
+        return components?.url
+    }
+
+    private func load(reset: Bool) async {
+        if reset {
+            page = 1
+            reachedEnd = false
+            isLoading = true
+        } else {
+            guard !isLoadingMore, !reachedEnd else { return }
+            isLoadingMore = true
+        }
+        defer {
+            isLoading = false
+            isLoadingMore = false
+        }
+
+        guard let url = makeURL(page: page) else {
+            errorMessage = "Invalid URL"
+            return
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                throw URLError(.badServerResponse)
+            }
+
+            let decoder = JSONDecoder()
+            let newItems: [ContentView.Anime]
+            if let envelope = try? decoder.decode(ContentView.APIResponse.self, from: data) {
+                newItems = envelope.items
+            } else if let direct = try? decoder.decode([ContentView.Anime].self, from: data) {
+                newItems = direct
+            } else {
+                let raw = String(data: data, encoding: .utf8) ?? "<non-utf8 data>"
+                print("SeeAll decode error raw response:", raw)
+                throw NSError(domain: "DecodeError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected response format"])
+            }
+
+            await MainActor.run {
+                if reset {
+                    items = newItems
+                } else {
+                    items.append(contentsOf: newItems)
+                }
+                errorMessage = nil
+                if newItems.count < pageSize {
+                    reachedEnd = true
+                } else {
+                    page += 1
+                }
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = (error as NSError).localizedDescription
+            }
         }
     }
 }
@@ -2357,4 +2575,3 @@ struct ProfileView: View {
 enum AppTab: Hashable { case discover, search, seasons, myList, profile }
 struct ContentView: View { var body: some View { ContentUnavailableView("AsunaTracks is available on iPhone", systemImage: "iphone") } }
 #endif
-
